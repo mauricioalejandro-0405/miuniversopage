@@ -456,9 +456,125 @@
       }
       .btn-music.visible { display: block; }
 
+      /* ---------- Aviso de giro: en el celular, primero hay que ponerlo en horizontal ---------- */
+      #rotateGate {
+        position: fixed;
+        inset: 0;
+        z-index: 60;
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 1.25rem;
+        padding: 2rem 1.6rem;
+        text-align: center;
+        background: radial-gradient(ellipse at 50% 38%, #0b1434 0%, #02030a 72%);
+      }
+      #rotateGate.visible { display: flex; }
+      .rotate-anim {
+        position: relative;
+        width: 172px;
+        height: 172px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .rotate-ring {
+        position: absolute;
+        inset: 0;
+        color: rgba(159, 195, 255, 0.5);
+        animation: ringspin 7s linear infinite;
+      }
+      .phone-icon {
+        width: 62px;
+        height: 104px;
+        border: 3px solid var(--ink);
+        border-radius: 13px;
+        position: relative;
+        box-shadow: 0 10px 34px rgba(0, 0, 0, 0.6);
+        animation: phonerotate 3.2s ease-in-out infinite alternate;
+      }
+      .phone-icon::before {
+        content: "";
+        position: absolute;
+        inset: 9px 6px 16px;
+        border-radius: 4px;
+        background: linear-gradient(160deg, rgba(159, 195, 255, 0.55), rgba(159, 195, 255, 0.12));
+      }
+      .phone-icon::after {
+        content: "";
+        position: absolute;
+        left: 50%;
+        bottom: 4px;
+        width: 16px;
+        height: 4px;
+        border-radius: 2px;
+        transform: translateX(-50%);
+        background: rgba(242, 240, 234, 0.65);
+      }
+      @keyframes phonerotate {
+        0%, 28% { transform: rotate(0deg); }
+        72%, 100% { transform: rotate(90deg); }
+      }
+      @keyframes ringspin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+      #rotateGate h2 {
+        font-family: var(--serif);
+        font-weight: 500;
+        font-size: clamp(1.9rem, 8vw, 2.6rem);
+        line-height: 1.15;
+        margin: 0;
+      }
+      #rotateGate p {
+        margin: 0;
+        max-width: 19rem;
+        font-size: 1rem;
+        line-height: 1.55;
+        color: var(--ink-dim);
+      }
+      #rotateGate .rotate-note {
+        font-size: 0.85rem;
+        color: rgba(242, 240, 234, 0.48);
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .phone-icon { animation: none; transform: rotate(90deg); }
+        .rotate-ring { animation: none; }
+      }
+
       @media (max-height: 720px) {
         .libro { width: min(56vw, 225px); }
         .mesa-pata { height: 28px; }
+      }
+
+      /* ---------- Celular en horizontal: pantalla baja, todo debe caber sin cortarse ---------- */
+      @media (orientation: landscape) and (max-height: 540px) {
+        #meadow {
+          justify-content: flex-start;
+          overflow-y: auto;
+          padding-top: calc(max(0.6rem, env(safe-area-inset-top)) + 3.1rem);
+        }
+        .meadow-title {
+          position: static;
+          transform: none;
+          width: min(92vw, 34rem);
+          margin: 0 auto 0.5rem;
+          font-size: 1.35rem;
+        }
+        .mesa-zona { margin: auto 0; }
+        .libro { width: min(150px, 40vh); }
+        .mesa-tabla { height: 11px; }
+        .mesa-patas { padding: 0 30px; }
+        .mesa-pata { width: 12px; height: 20px; }
+        .libro-nav { margin-top: 0.55rem; }
+        .meadow-hint { font-size: 0.78rem; margin-top: 0.4rem; }
+        .btn-again { min-height: 40px; margin-top: 0.1rem; font-size: 0.88rem; }
+        .caption { bottom: max(9vh, 3.4rem); }
+        .finale { bottom: max(5vh, 1.6rem); }
+        .finale p { margin-bottom: 1rem; }
+        #startGate { gap: 0.7rem; padding: 1rem; }
+        #startGate h1 { font-size: clamp(1.7rem, 6vh + 1rem, 2.6rem); }
       }
 
       @media (prefers-reduced-motion: reduce) {
@@ -478,6 +594,18 @@
         <h1>Un viaje hasta ti</h1>
         <p>Un recorrido por la galaxia, con nuestra canción sonando desde el primer segundo.</p>
         <button class="btn-start" id="btnStart" type="button">▶&ensp;Empezar el viaje con música</button>
+      </section>
+
+      <section id="rotateGate" aria-label="Gira tu teléfono para empezar" aria-hidden="true">
+        <div class="rotate-anim" aria-hidden="true">
+          <svg class="rotate-ring" viewBox="0 0 100 100" focusable="false">
+            <circle cx="50" cy="50" r="46" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="3 8" stroke-linecap="round" />
+          </svg>
+          <div class="phone-icon"></div>
+        </div>
+        <h2>Gira tu teléfono</h2>
+        <p>Este viaje está hecho para verse en horizontal. Gira tu celular y aparecerá el botón para empezar, con la canción.</p>
+        <p class="rotate-note">Si la pantalla no gira sola, activa la rotación automática de tu teléfono.</p>
       </section>
 
       <p class="caption" id="caption" aria-live="polite"></p>
@@ -657,6 +785,7 @@
         var startGate = document.getElementById("startGate");
         var startBtn = document.getElementById("btnStart");
         var started = false; // el viaje (y la canción) arrancan con el primer toque
+        var gateActive = false; // true en el celular en vertical: todo el proyecto queda en pausa
 
         window.addEventListener("error", function (e) {
           errEl.style.display = "block";
@@ -1069,7 +1198,7 @@
           // Si el navegador bloqueó el primer intento, cualquier toque
           // posterior en la página reintenta la reproducción.
           document.addEventListener("pointerdown", function () {
-            if (wantOn && !userPaused && audio.paused) play();
+            if (wantOn && !userPaused && audio.paused && !gateActive) play();
           });
 
           function refreshMusicUI() {
@@ -1087,6 +1216,10 @@
               if (audio.paused) { play(); }
               else { userPaused = true; audio.pause(); }
             },
+            // Pausa por el aviso de giro: no cuenta como pausa de ella,
+            // así al volver a horizontal la canción sigue sola.
+            gatePause: function () { audio.pause(); },
+            gateResume: function () { if (wantOn && !userPaused && audio.paused) play(); },
             isOn: function () { return !audio.paused; },
             needsTap: function () { return wantOn && !userPaused && audio.paused; }
           };
@@ -1094,7 +1227,7 @@
 
         /* ---------- Arranque: el primer toque inicia el viaje y la canción ---------- */
         startBtn.addEventListener("click", function () {
-          if (started) return;
+          if (started || gateActive) return;
           started = true;
           startTime = null; // el bucle reinicia el reloj: el viaje empieza de cero
           Music.start();
@@ -1118,6 +1251,37 @@
           Music.toggle();
           updateMusicBtn();
         });
+
+        /* ---------- Puerta de orientación ----------
+           En un celular en vertical NO se reproduce nada: ni la intro,
+           ni la canción, ni el pase de páginas. Se muestra el aviso de
+           giro y todo queda en pausa hasta que el teléfono esté en
+           horizontal; al girarlo, lo que estaba sonando continúa solo.
+           En computador (sin puntero táctil grueso) nunca se activa. */
+        var rotateGateEl = document.getElementById("rotateGate");
+        var gateMQ = window.matchMedia("(orientation: portrait) and (max-width: 680px)");
+        var coarsePointer = window.matchMedia("(pointer: coarse)").matches;
+        var musicGatePaused = false;
+        function checkGate() {
+          var active = coarsePointer && navigator.maxTouchPoints > 0 && gateMQ.matches;
+          if (active === gateActive) return;
+          gateActive = active;
+          rotateGateEl.classList.toggle("visible", active);
+          rotateGateEl.setAttribute("aria-hidden", active ? "false" : "true");
+          if (active) {
+            musicGatePaused = Music.isOn();
+            if (musicGatePaused) Music.gatePause();
+            clearAutoPageTimer();
+          } else {
+            if (musicGatePaused) Music.gateResume();
+            musicGatePaused = false;
+            if (inMeadow) scheduleAutoPage();
+          }
+        }
+        if (gateMQ.addEventListener) gateMQ.addEventListener("change", checkGate);
+        window.addEventListener("orientationchange", checkGate);
+        window.addEventListener("resize", checkGate);
+        checkGate();
 
         /* ---------- El libro: hojas que se voltean ---------- */
         var leaves = Array.prototype.slice.call(libroEl.querySelectorAll(".hoja"));
@@ -1264,6 +1428,14 @@
         var lastFov = 58;
         function frame(now) {
           requestAnimationFrame(frame);
+          if (gateActive) {
+            // Con el aviso de giro en pantalla, el viaje queda en pausa:
+            // el reloj se desplaza con el tiempo real para que nada avance.
+            if (startTime !== null) startTime += (now - lastNow);
+            if (diving) diveStart += (now - lastNow);
+            lastNow = now;
+            return;
+          }
           if (inMeadow) return; // en el prado no hace falta seguir dibujando el espacio
           try {
             if (startTime === null) { startTime = now; lastNow = now; }
