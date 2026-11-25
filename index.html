@@ -538,6 +538,22 @@
         font-size: 0.85rem;
         color: rgba(242, 240, 234, 0.48);
       }
+      .btn-fullscreen {
+        font-family: var(--sans);
+        font-size: 1rem;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        color: var(--ink);
+        background: rgba(159, 195, 255, 0.14);
+        border: 1px solid rgba(159, 195, 255, 0.55);
+        border-radius: 999px;
+        padding: 0.85rem 1.8rem;
+        min-height: 52px;
+        cursor: pointer;
+        transition: background 0.25s ease, border-color 0.25s ease, transform 0.25s ease;
+      }
+      .btn-fullscreen:hover { background: rgba(159, 195, 255, 0.24); border-color: var(--accent); transform: translateY(-1px); }
+      .btn-fullscreen:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
       @media (prefers-reduced-motion: reduce) {
         .phone-icon { animation: none; transform: rotate(90deg); }
         .rotate-ring { animation: none; }
@@ -605,7 +621,8 @@
         </div>
         <h2>Gira tu teléfono</h2>
         <p>Este viaje está hecho para verse en horizontal. Gira tu celular y aparecerá el botón para empezar, con la canción.</p>
-        <p class="rotate-note">Si la pantalla no gira sola, activa la rotación automática de tu teléfono.</p>
+        <button class="btn-fullscreen" id="btnRotateFs" type="button">⛶&ensp;Ver en pantalla completa</button>
+        <p class="rotate-note">El botón abre la página en pantalla completa, como un video, y gira la vista a horizontal donde el teléfono lo permite. Si la pantalla no gira sola, activa la rotación automática de tu teléfono.</p>
       </section>
 
       <p class="caption" id="caption" aria-live="polite"></p>
@@ -788,8 +805,14 @@
         var gateActive = false; // true en el celular en vertical: todo el proyecto queda en pausa
 
         window.addEventListener("error", function (e) {
+          var msg = e.message || "";
+          // «Script error.» es el aviso genérico que el navegador da por
+          // errores ajenos a esta página (extensiones u otros scripts sin
+          // origen accesible): no es un fallo de la animación y no debe
+          // aparecer como una alerta para quien está viendo el viaje.
+          if (!msg || msg === "Script error." || msg.indexOf("ResizeObserver") !== -1) return;
           errEl.style.display = "block";
-          errEl.textContent = "Algo falló en la animación: " + (e.message || "error desconocido");
+          errEl.textContent = "Algo falló en la animación: " + msg;
         });
 
         /* ---------- Utilidades de tiempo ---------- */
@@ -1229,6 +1252,9 @@
         startBtn.addEventListener("click", function () {
           if (started || gateActive) return;
           started = true;
+          // Este toque es un gesto válido: en el celular el viaje
+          // arranca en pantalla completa, como un video.
+          if (coarsePointer) enterFullscreen();
           startTime = null; // el bucle reinicia el reloj: el viaje empieza de cero
           Music.start();
           updateMusicBtn();
@@ -1262,6 +1288,42 @@
         var gateMQ = window.matchMedia("(orientation: portrait) and (max-width: 680px)");
         var coarsePointer = window.matchMedia("(pointer: coarse)").matches;
         var musicGatePaused = false;
+
+        /* ---------- Pantalla completa, como al ver un video ----------
+           Se intenta sola al girar el celular a horizontal, y también
+           con el botón del aviso de giro y al tocar «Empezar el viaje»
+           (esos dos toques sí cuentan como gesto y el navegador los
+           acepta). Si el navegador no lo permite sin toque —en el
+           iPhone, Safari y Brave no dejan poner la página en pantalla
+           completa— el intento falla en silencio y el viaje sigue
+           igual en horizontal. */
+        function enterFullscreen() {
+          var el = document.documentElement;
+          var req = el.requestFullscreen || el.webkitRequestFullscreen;
+          if (!req) return;
+          if (document.fullscreenElement || document.webkitFullscreenElement) return;
+          try {
+            var p = req.call(el);
+            if (p && typeof p.catch === "function") p.catch(function () {});
+          } catch (e) { return; }
+          // En Android, ya en pantalla completa, se fija la vista en horizontal.
+          if (coarsePointer && window.screen && screen.orientation && screen.orientation.lock) {
+            try {
+              var lp = screen.orientation.lock("landscape");
+              if (lp && typeof lp.catch === "function") lp.catch(function () {});
+            } catch (e) {}
+          }
+        }
+        var rotateFsBtn = document.getElementById("btnRotateFs");
+        if (rotateFsBtn) {
+          // Sin API de pantalla completa (iPhone), el botón no puede
+          // hacer nada: se oculta para no prometer lo imposible.
+          if (!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen)) {
+            rotateFsBtn.style.display = "none";
+          }
+          rotateFsBtn.addEventListener("click", enterFullscreen);
+        }
+
         function checkGate() {
           var active = coarsePointer && navigator.maxTouchPoints > 0 && gateMQ.matches;
           if (active === gateActive) return;
@@ -1273,6 +1335,11 @@
             if (musicGatePaused) Music.gatePause();
             clearAutoPageTimer();
           } else {
+            // Acaba de girar a horizontal: el lienzo se reajusta al
+            // tamaño nuevo y la página intenta abrirse en pantalla
+            // completa, como un video.
+            applySize();
+            enterFullscreen();
             if (musicGatePaused) Music.gateResume();
             musicGatePaused = false;
             if (inMeadow) scheduleAutoPage();
@@ -1415,19 +1482,39 @@
           targetNY = (e.clientY / window.innerHeight) * 2 - 1;
         }, { passive: true });
 
-        /* ---------- Tamaño ---------- */
-        window.addEventListener("resize", function () {
-          camera.aspect = window.innerWidth / window.innerHeight;
+        /* ---------- Tamaño ----------
+           Al girar el celular, algunos navegadores avisan del cambio
+           antes de tener listo el tamaño nuevo, y otros ni avisan.
+           Por eso el tamaño se revisa en cada fotograma y el lienzo
+           se corrige solo si quedó con el tamaño anterior: eso era
+           lo que dejaba la galaxia ocupando media pantalla y el
+           resto en negro después de girar el teléfono. */
+        var lastW = 0, lastH = 0;
+        function applySize() {
+          var w = window.innerWidth, h = window.innerHeight;
+          if (!w || !h || (w === lastW && h === lastH)) return;
+          lastW = w; lastH = h;
+          camera.aspect = w / h;
           camera.updateProjectionMatrix();
-          renderer.setSize(window.innerWidth, window.innerHeight);
-          if (composer) composer.setSize(window.innerWidth, window.innerHeight);
+          renderer.setSize(w, h);
+          if (composer) composer.setSize(w, h);
+        }
+        window.addEventListener("resize", applySize);
+        window.addEventListener("orientationchange", function () {
+          applySize();
+          setTimeout(applySize, 120);
+          setTimeout(applySize, 350);
+          setTimeout(applySize, 700);
         });
+        if (window.visualViewport) window.visualViewport.addEventListener("resize", applySize);
+        applySize();
 
         /* ---------- Bucle principal ---------- */
         var lastNow = 0;
         var lastFov = 58;
         function frame(now) {
           requestAnimationFrame(frame);
+          applySize(); // red de seguridad: corrige el lienzo si un giro no avisó
           if (gateActive) {
             // Con el aviso de giro en pantalla, el viaje queda en pausa:
             // el reloj se desplaza con el tiempo real para que nada avance.
